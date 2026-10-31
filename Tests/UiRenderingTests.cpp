@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <atomic>
 
+#include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -131,6 +132,73 @@ class UiRenderingTests : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    void MainWindowDismissalDependsOnShowSource_data()
+    {
+        QTest::addColumn<bool>("automaticBefore");
+        QTest::addColumn<bool>("fromTray");
+        QTest::addColumn<bool>("automaticAfter");
+        QTest::newRow("automatic") << true << false << false;
+        QTest::newRow("tray") << false << true << false;
+        QTest::newRow("automatic-then-tray") << true << true << false;
+        QTest::newRow("tray-then-automatic") << false << true << true;
+    }
+
+    void MainWindowDismissalDependsOnShowSource()
+    {
+        QFETCH(bool, automaticBefore);
+        QFETCH(bool, fromTray);
+        QFETCH(bool, automaticAfter);
+
+        Gui::MainWindow window;
+        if (automaticBefore) {
+            window.Show();
+        }
+        if (fromTray) {
+            window.ShowFromTray();
+        }
+        if (automaticAfter) {
+            window.Show();
+        }
+        QVERIFY(window.isVisible());
+
+        // Drive Qt's window activation explicitly, without relying on OS focus-stealing policy.
+        QApplication::setActiveWindow(&window);
+        QDialog otherWindow;
+        otherWindow.show();
+        QApplication::setActiveWindow(&otherWindow);
+        if (fromTray) {
+            QTRY_VERIFY_WITH_TIMEOUT(!window.isVisible(), 2000);
+
+            // Reusing the same popup for a later automatic notification resets its behavior.
+            window.Show();
+            QApplication::setActiveWindow(&window);
+            QApplication::setActiveWindow(&otherWindow);
+        }
+        QTest::qWait(750);
+        QVERIFY(window.isVisible());
+    }
+
+    void MainWindowKeepsTrayPopupOpenForDeviceDialog()
+    {
+        Gui::MainWindow window;
+        window.ShowFromTray();
+        QApplication::setActiveWindow(&window);
+
+        QDialog deviceDialog{&window};
+        deviceDialog.setWindowModality(Qt::WindowModal);
+        deviceDialog.show();
+        QApplication::setActiveWindow(&deviceDialog);
+        QTest::qWait(750);
+        QVERIFY(window.isVisible());
+
+        deviceDialog.hide();
+        QApplication::setActiveWindow(&window);
+        QDialog otherWindow;
+        otherWindow.show();
+        QApplication::setActiveWindow(&otherWindow);
+        QTRY_VERIFY_WITH_TIMEOUT(!window.isVisible(), 2000);
+    }
+
     void MainWindowRendersAirPods5()
     {
         Core::AirPods::State state;

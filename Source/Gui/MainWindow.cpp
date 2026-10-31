@@ -18,6 +18,7 @@
 
 #include "MainWindow.h"
 
+#include <QApplication>
 #include <QScreen>
 #include <QCursor>
 #include <QFontMetrics>
@@ -25,6 +26,7 @@
 #include <QMessageBox>
 #include <QCloseEvent>
 #include <QEnterEvent>
+#include <QEvent>
 
 #include <Config.h>
 #include "../Helper.h"
@@ -444,7 +446,7 @@ void MainWindow::ControlAutoHideTimer(bool start)
 {
     LOG(Trace, "ControlAutoHideTimer: start == '{}', _isVisible == '{}'", start, _isVisible);
 
-    if (start && _isVisible) {
+    if (start && _isVisible && !_hideOnDeactivate) {
         _autoHideTimer->start(10s);
     }
     else {
@@ -545,6 +547,12 @@ void MainWindow::FitDeviceLabelFont(const QString &text)
 void MainWindow::OnAppStateChanged(Qt::ApplicationState state)
 {
     LOG(Trace, "OnAppStateChanged: '{}'", Helper::ToString(state));
+    if (_hideOnDeactivate) {
+        if (state != Qt::ApplicationActive) {
+            QTimer::singleShot(0, this, &MainWindow::HideIfInactive);
+        }
+        return;
+    }
     ControlAutoHideTimer(_isVisible && state != Qt::ApplicationActive);
 }
 
@@ -606,6 +614,35 @@ void MainWindow::DoHide()
     _posAnimation.start();
 }
 
+void MainWindow::HideIfInactive()
+{
+    if (!_isVisible || !_hideOnDeactivate || isActiveWindow()) {
+        return;
+    }
+
+    // Opening a device selector or warning temporarily activates a child dialog.
+    // Follow dialog owners because isAncestorOf() stops at window boundaries.
+    for (const auto *owner = QApplication::activeModalWidget(); owner != nullptr;
+         owner = owner->parentWidget())
+    {
+        if (owner == this) {
+            return;
+        }
+    }
+
+    DoHide();
+}
+
+bool MainWindow::event(QEvent *event)
+{
+    const auto result = QDialog::event(event);
+    if (event->type() == QEvent::WindowDeactivate && _hideOnDeactivate) {
+        // Let Qt finish changing the active window before checking child dialogs.
+        QTimer::singleShot(0, this, &MainWindow::HideIfInactive);
+    }
+    return result;
+}
+
 void MainWindow::showEvent(QShowEvent *event)
 {
     QDialog::showEvent(event);
@@ -613,6 +650,23 @@ void MainWindow::showEvent(QShowEvent *event)
 }
 
 void MainWindow::Show()
+{
+    // An automatic notification must not downgrade an already-open tray popup.
+    if (!_isVisible) {
+        _hideOnDeactivate = false;
+    }
+    ShowWindow();
+}
+
+void MainWindow::ShowFromTray()
+{
+    _hideOnDeactivate = true;
+    ShowWindow();
+    raise();
+    activateWindow();
+}
+
+void MainWindow::ShowWindow()
 {
     if (isVisible()) {
         BeginShow(false);

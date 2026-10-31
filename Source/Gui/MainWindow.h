@@ -52,6 +52,7 @@ public:
 
     void StartUpdateChecks();
     void Show();
+    void ShowFromTray();
 
     void UpdateState(const Core::AirPods::State &state);
     void Available();
@@ -98,6 +99,7 @@ private:
     ButtonAction _buttonAction{ButtonAction::NoButton};
     MainWindowViewModel _viewModel;
     bool _isVisible{false};
+    bool _hideOnDeactivate{false};
     std::atomic<bool> _deviceQueryRunning{false};
     std::jthread _deviceQueryThread;
 
@@ -119,7 +121,10 @@ private:
     void OnButtonClicked();
 
     void DoHide();
+    void HideIfInactive();
+    void ShowWindow();
     void BeginShow(bool fromHidden);
+    bool event(QEvent *event) override;
     void paintEvent(QPaintEvent *event) override;
     void showEvent(QShowEvent *event) override;
     void hideEvent(QHideEvent *event) override;

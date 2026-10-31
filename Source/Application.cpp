@@ -288,7 +288,7 @@ void ApdApplication::ConnectGuiComponents()
 {
     connect(
         _trayIcon.get(), &Gui::TrayIcon::ShowMainWindowRequested, _mainWindow.get(),
-        &Gui::MainWindow::Show);
+        &Gui::MainWindow::ShowFromTray);
     connect(
         _trayIcon.get(), &Gui::TrayIcon::UserUpdateRequested, _mainWindow.get(),
         &Gui::MainWindow::AskUserUpdate);
